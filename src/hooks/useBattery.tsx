@@ -5,19 +5,35 @@ export const useBattery = () => {
 
   const [bettery, setBettery] = useState<number>(0);
   const [charging , setCharging] = useState<boolean>(false);
+  const [permissionNotification, setPermissionNotification] = useState<boolean>(false);
 
   useEffect(() => {
+    if ('Notification' in window && navigator.serviceWorker) {
+      Notification.requestPermission().then((permission) => {
+        setPermissionNotification(permission === 'granted');
+        if (permission === 'granted') {
+          listenerLevelBattery();
+        }
+      });
+    }
+  }, []);
+
+  const listenerLevelBattery = () => {
     if ('getBattery' in navigator) {
       (navigator as any).getBattery().then((battery: any) => {
-        setBettery(battery.level * 100);
+        setBettery(numeroEntero(battery.level * 100));
         setCharging(battery.charging);
-        battery.addEventListener('levelchange', () => {
-          const levelBattery = battery.level * 100;
+        battery.addEventListener('levelchange', async () => {
+          const leveMax = 99;
+          const leveMin = 17;
+          const levelBattery = numeroEntero(battery.level * 100);
           setBettery(levelBattery);
           const messageLevel = `\nBattery Level: ${bettery}%`
-          const message = levelBattery === 100 ? 'Fully charged battery' : 'Low battery, it is recommended to connect charger.';
-          if (levelBattery === 100 || levelBattery === 15) {
-            handleShowNotification(`${message + messageLevel}`);
+          const message = levelBattery > leveMax ? 'Fully charged battery' : 'Low battery,\nit is recommended to connect charger.';
+          if (levelBattery > leveMax || (levelBattery <= leveMin && !charging)) {
+            const fullMessage = `${message + messageLevel}`;
+            handleShowNotification(fullMessage);
+            await sentMessage(fullMessage, '');
           }
         });
 
@@ -28,7 +44,7 @@ export const useBattery = () => {
     } else {
       handleShowNotification('The Battery API is not supported in this browser.')
     }
-  }, []);
+  }
 
   const handleShowNotification = (body: string) => {
     if (Notification.permission === 'granted') {
@@ -47,8 +63,39 @@ export const useBattery = () => {
     }
   };
 
+  const sentMessage = async (message: string, chatId: string) => {
+    const botToken = ''; // Reemplaza con tu token de acceso
+
+    try {
+      const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: message,
+        }),
+      });
+
+      if (response.ok) {
+        console.log('Mensaje enviado exitosamente');
+      } else {
+        console.error('Error al enviar el mensaje:', response.status);
+      }
+    } catch (error) {
+      console.error('Error de conexión:', error);
+    }
+  }
+
+  const numeroEntero = (numero: number): number => {
+    return parseInt(numero.toFixed(0));
+  }
+
   return {
     bettery,
-    charging
+    charging,
+    permissionNotification,
+    sentMessage
   }
 }
